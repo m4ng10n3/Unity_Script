@@ -17,8 +17,8 @@ public class SwordAttack : MonoBehaviour
     private bool attacking;
     private Animator anim;
     private readonly Collider2D[] results = new Collider2D[8];
-        private readonly HashSet<IDamageable> damagedTargets = new HashSet<IDamageable>();
-            public bool IsAttacking => attacking;
+    private readonly HashSet<IDamageable> damagedTargets = new HashSet<IDamageable>();
+    public bool IsAttacking => attacking;
 
 
 
@@ -46,10 +46,11 @@ public class SwordAttack : MonoBehaviour
             for (int i = 0; i < count; i++)
             {
                 var d = results[i].GetComponentInParent<IDamageable>();
-                if (d != nul && !damagedTargets.Contains(d)
+                if (d != null && !damagedTargets.Contains(d))
+                {
                     d.TakeDamage(damage, results[i].transform.position, Vector2.zero);
-                                damagedTargets.Add(d);
-
+                    damagedTargets.Add(d);
+                }
             }
             yield return null;
         }
@@ -63,7 +64,7 @@ public class SwordAttack : MonoBehaviour
     }
     public void EndAttackWindow()
     {
-        // se vuoi chiuderla prima, imposta attacking=false o usa una variabile endTime
+      // se vuoi chiuderla prima, imposta attacking=false o usa una variabile endTime
     }
 
     private void OnDrawGizmosSelected()

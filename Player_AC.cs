@@ -65,9 +65,15 @@ public class PlayerAnimatorLink : MonoBehaviour
     public void AE_StartAttackWindow()
     {
         var sword = GetComponentInChildren<SwordAttack>();
-        var facingRight = transform.localScale.x >= 0f;
-        // if (sword) sword.DoAttack(facingRight);
+        bool facingRight = transform.localScale.x >= 0f;
+        if (sword != null)
+        {
+            sword.DoAttack(facingRight);
+            Debug.Log("Evento d'attacco chiamato");
+        }
     }
+
+    
 
     private void OnDrawGizmosSelected()
     {
