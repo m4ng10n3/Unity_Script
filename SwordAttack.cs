@@ -4,7 +4,7 @@ using UnityEngine;
 public class SwordAttack : MonoBehaviour
 {
     [SerializeField] private int damage = 1;
-    [SerializeField] private float attackDuration = 0.12f;
+    [SerializeField] private float attackDuration = 1.1f;
 
     [Tooltip("Offset orizzontale della hitbox (destra). A sinistra viene specchiato.")]
     [SerializeField] private Vector2 hitboxOffsetRight = new Vector2(0.6f, 0f);
@@ -13,6 +13,7 @@ public class SwordAttack : MonoBehaviour
     [SerializeField] private LayerMask targets; // setta su Enemy nel Inspector
 
     private bool attacking;
+    private Animator anim;
     private readonly Collider2D[] results = new Collider2D[8];
 
     public void DoAttack(bool facingRight)
