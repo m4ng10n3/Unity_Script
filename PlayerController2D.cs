@@ -31,6 +31,13 @@ public class PlayerController2D : MonoBehaviour
 
     private void Update()
     {
+        // CHANGE: Lock movement and input while attacking
+        if (sword != null && sword.IsAttacking)
+        {
+            moveInput = 0f;
+            return;
+        }
+
         moveInput = Input.GetAxisRaw("Horizontal");
 
         if (Input.GetButtonDown("Jump") && isGrounded)
@@ -49,15 +56,26 @@ public class PlayerController2D : MonoBehaviour
     private void FixedUpdate()
     {
         isGrounded = Physics2D.OverlapCircle(groundCheck.position, groundCheckRadius, groundLayer);
+
+        // CHANGE: Freeze horizontal velocity while attacking
+        if (sword != null && sword.IsAttacking)
+        {
+            rb.linearVelocity = new Vector2(0f, rb.linearVelocity.y);
+            return;
+        }
+
         rb.linearVelocity = new Vector2(moveInput * moveSpeed, rb.linearVelocity.y);
     }
 
     private void TryAttack()
     {
+        // CHANGE: Prevent new attack while current attack is active
+        if (sword != null && sword.IsAttacking) return;
         if (Time.time - lastAttackTime < attackCooldown) return;
         lastAttackTime = Time.time;
         if (animLink != null) animLink.PlayAttack();
-        sword.DoAttack(facingRight);
+        // Hitbox triggered via AnimationEvent
+        // sword.DoAttack(facingRight);
     }
 
     private void FlipIfNeeded(float input)
