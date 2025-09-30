@@ -66,7 +66,7 @@ public class PlayerAnimatorLink : MonoBehaviour
     {
         var sword = GetComponentInChildren<SwordAttack>();
         var facingRight = transform.localScale.x >= 0f;
-        if (sword) sword.DoAttack(facingRight);
+        // if (sword) sword.DoAttack(facingRight);
     }
 
     private void OnDrawGizmosSelected()
