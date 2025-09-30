@@ -1,5 +1,7 @@
 using System.Collections;
 using UnityEngine;
+using System.Collections.Generic;
+
 
 public class SwordAttack : MonoBehaviour
 {
@@ -15,6 +17,10 @@ public class SwordAttack : MonoBehaviour
     private bool attacking;
     private Animator anim;
     private readonly Collider2D[] results = new Collider2D[8];
+        private readonly HashSet<IDamageable> damagedTargets = new HashSet<IDamageable>();
+            public bool IsAttacking => attacking;
+
+
 
     public void DoAttack(bool facingRight)
     {
@@ -25,6 +31,7 @@ public class SwordAttack : MonoBehaviour
     {
         attacking = true;
         float end = Time.time + attackDuration;
+        damagedTargets.Clear();
 
         Vector2 offset = facingRight
             ? hitboxOffsetRight
@@ -39,8 +46,10 @@ public class SwordAttack : MonoBehaviour
             for (int i = 0; i < count; i++)
             {
                 var d = results[i].GetComponentInParent<IDamageable>();
-                if (d != null)
+                if (d != nul && !damagedTargets.Contains(d)
                     d.TakeDamage(damage, results[i].transform.position, Vector2.zero);
+                                damagedTargets.Add(d);
+
             }
             yield return null;
         }
