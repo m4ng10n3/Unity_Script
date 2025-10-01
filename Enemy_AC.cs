@@ -21,3 +21,4 @@ public class EnemyAnimatorLink : MonoBehaviour
     public void PlayAttack() => anim.SetTrigger("attack");
     public void PlayDie() => anim.SetTrigger("die");
 }
+//pippo
