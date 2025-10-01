@@ -6,13 +6,13 @@ public class EnemyAnimatorLink : MonoBehaviour
 {
     private Animator anim;
     private Rigidbody2D rb;
-    private EnemyController controller;
+    private EnemyController2D controller;
 
     private void Awake()
     {
         anim = GetComponent<Animator>();
         rb = GetComponent<Rigidbody2D>();
-        controller = GetComponent<EnemyController>();
+        controller = GetComponent<EnemyController2D>();
     }
 
     private void Update()
