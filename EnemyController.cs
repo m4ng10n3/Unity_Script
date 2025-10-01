@@ -300,8 +300,8 @@ public class EnemyController2D : MonoBehaviour
             foreach (var atk in attacks)
             {
                 if (atk.hitboxRadius > maxRadius) maxRadius = atk.hitboxRadius;
+                Gizmos.DrawWireSphere(attackPoint.position, maxRadius);
             }
-            Gizmos.DrawWireSphere(attackPoint.position, maxRadius);
         }
     }
 }
