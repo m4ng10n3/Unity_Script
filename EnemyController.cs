@@ -6,6 +6,17 @@ public class EnemyController2D : MonoBehaviour
 {
     private enum State { Patrol, Chase, Attack }
 
+    [System.Serializable]
+    private class EnemyAttackInfo
+    {
+        public float range = 1.2f;
+        public float hitboxRadius = 0.6f;
+        public float cooldown = 0.8f;
+        public int damage = 1;
+        public string trigger = "attackClose";
+        [HideInInspector] public float lastAttackTime = -999f;
+    }
+
     [Header("Waypoints (posizionane due in scena)")]
     [SerializeField] private Transform pointA;
     [SerializeField] private Transform pointB;
@@ -19,9 +30,16 @@ public class EnemyController2D : MonoBehaviour
 
     [Header("Behavior")]
     [SerializeField] private float aggroRange = 6f;
-    [SerializeField] private float attackRange = 1.2f;
-    [SerializeField] private float attackCooldown = 0.8f;
-    [SerializeField] private int damage = 1;
+
+    [Header("Attack Types")]
+    [SerializeField] private EnemyAttackInfo[] attacks = new EnemyAttackInfo[]
+    {
+        new EnemyAttackInfo { range = 1.2f, hitboxRadius = 0.6f, cooldown = 0.8f, damage = 1, trigger = "attackClose" },
+        new EnemyAttackInfo { range = 2.5f, hitboxRadius = 0.8f, cooldown = 1.2f, damage = 1, trigger = "attackMid" },
+        new EnemyAttackInfo { range = 4f, hitboxRadius = 1f, cooldown = 2f, damage = 2, trigger = "attackJump" }
+    };
+
+    [SerializeField] private float chaseMemoryTime = 3f;
 
     [Header("Layers")]
     [SerializeField] private LayerMask playerLayer;
@@ -29,18 +47,18 @@ public class EnemyController2D : MonoBehaviour
     [Header("Links")]
     [SerializeField] private EnemyAnimatorLink animLink;
 
-
-
     private Rigidbody2D rb;
     private Transform player;
     private State state = State.Patrol;
     private bool facingRight = true;
     private bool waiting;
-    private float lastAttackTime = -999f;
 
     // Waypoint positions "fisse" (world space), prese all'avvio
     private Vector2 patrolA, patrolB;
     private Vector2 currentTarget;
+
+    private float lastSeenTimer = 0f;
+    private EnemyAttackInfo currentAttack;
 
     private void Awake()
     {
@@ -66,12 +84,32 @@ public class EnemyController2D : MonoBehaviour
         {
             float distToPlayer = Vector2.Distance(transform.position, player.position);
 
-            if (distToPlayer <= attackRange)
-                state = State.Attack;
-            else if (distToPlayer <= aggroRange)
-                state = State.Chase;
+            // memoria del player: reset timer se dentro aggroRange, altrimenti incrementa
+            if (distToPlayer <= aggroRange)
+            {
+                lastSeenTimer = 0f;
+            }
             else
+            {
+                lastSeenTimer += Time.deltaTime;
+            }
+
+            // scegli attacco in base alla distanza
+            currentAttack = ChooseAttackByDistance(distToPlayer);
+
+            // Determina stato
+            if (currentAttack != null && distToPlayer <= currentAttack.range)
+            {
+                state = State.Attack;
+            }
+            else if (distToPlayer <= aggroRange || lastSeenTimer < chaseMemoryTime)
+            {
+                state = State.Chase;
+            }
+            else
+            {
                 state = State.Patrol;
+            }
         }
         else
         {
@@ -128,25 +166,76 @@ public class EnemyController2D : MonoBehaviour
         rb.linearVelocity = new Vector2(dir * moveSpeed, rb.linearVelocity.y);
     }
 
+    private EnemyAttackInfo ChooseAttackByDistance(float distance)
+    {
+        EnemyAttackInfo best = null;
+        float smallestRange = float.MaxValue;
+        foreach (var atk in attacks)
+        {
+            if (distance <= atk.range && atk.range < smallestRange)
+            {
+                best = atk;
+                smallestRange = atk.range;
+            }
+        }
+        return best;
+    }
+
     private void Attack()
     {
+        if (currentAttack == null)
+        {
+            state = State.Chase; // fallback
+            return;
+        }
+
         // fermo orizzontalmente mentre attacco
         rb.linearVelocity = new Vector2(0, rb.linearVelocity.y);
 
-        if (Time.time - lastAttackTime < attackCooldown) return;
-        lastAttackTime = Time.time;
+        // Controlla il cooldown specifico dell'attacco
+        if (Time.time - currentAttack.lastAttackTime < currentAttack.cooldown) return;
 
-        if (animLink != null) animLink.PlayAttack();
+        currentAttack.lastAttackTime = Time.time;
 
-        if (attackPoint == null) attackPoint = transform;
+        // riproduci l'animazione corretta tramite animLink
+        if (animLink != null)
+        {
+            switch (currentAttack.trigger)
+            {
+                case "attackClose":
+                    animLink.PlayAttackClose();
+                    break;
+                case "attackMid":
+                    animLink.PlayAttackMid();
+                    break;
+                case "attackJump":
+                    animLink.PlayAttackJump();
+                    break;
+                default:
+                    animLink.PlayAttack();
+                    break;
+            }
+        }
+    }
 
-        // Colpisci il player se nel raggio
-        Collider2D hit = Physics2D.OverlapCircle(attackPoint.position, 0.6f, playerLayer);
+    // Chiamato dagli Animation Events per infliggere il danno
+    public void OpenDamageWindow()
+    {
+        if (currentAttack == null) return;
+
+        float radius = currentAttack.hitboxRadius;
+        Vector3 pos = (attackPoint != null) ? attackPoint.position : transform.position;
+        Collider2D hit = Physics2D.OverlapCircle(pos, radius, playerLayer);
         if (hit != null)
         {
             var dmg = hit.GetComponentInParent<IDamageable>();
-            if (dmg != null) dmg.TakeDamage(damage, attackPoint.position, Vector2.zero);
+            if (dmg != null) dmg.TakeDamage(currentAttack.damage, pos, Vector2.zero);
         }
+    }
+
+    public void CloseDamageWindow()
+    {
+        // Placeholder for extended logic
     }
 
     private void HandleFlip()
@@ -180,10 +269,19 @@ public class EnemyController2D : MonoBehaviour
 
     private void OnDrawGizmosSelected()
     {
+        // Draw aggro range
         Gizmos.color = Color.cyan;
         Gizmos.DrawWireSphere(transform.position, aggroRange);
-        Gizmos.color = Color.red;
-        Gizmos.DrawWireSphere(transform.position, attackRange);
+
+        // Draw ranges for each attack using colors
+        if (attacks != null)
+        {
+            foreach (var atk in attacks)
+            {
+                Gizmos.color = Color.red;
+                Gizmos.DrawWireSphere(transform.position, atk.range);
+            }
+        }
 
         // Disegna i waypoint salvati (se in Play) oppure i Transform (in Edit)
         Vector3 a = (Application.isPlaying || pointA == null) ? (Vector3)patrolA : pointA.position;
@@ -197,7 +295,13 @@ public class EnemyController2D : MonoBehaviour
         if (attackPoint != null)
         {
             Gizmos.color = Color.magenta;
-            Gizmos.DrawWireSphere(attackPoint.position, 0.6f);
+            // draw max hitbox radius of current attacks
+            float maxRadius = 0f;
+            foreach (var atk in attacks)
+            {
+                if (atk.hitboxRadius > maxRadius) maxRadius = atk.hitboxRadius;
+            }
+            Gizmos.DrawWireSphere(attackPoint.position, maxRadius);
         }
     }
 }
