@@ -33,9 +33,7 @@ public class PlayerAnimatorLink : MonoBehaviour
         rb = GetComponent<Rigidbody2D>();
 
         if (groundCheck == null)
-        {
-            Debug.LogWarning("[PlayerAnimatorLink] groundCheck non assegnato: il check del suolo non funzionerà.");
-        }
+            Debug.LogWarning("[PlayerAnimatorLink] groundCheck non assegnato.");
     }
 
     private void Update()
@@ -43,9 +41,7 @@ public class PlayerAnimatorLink : MonoBehaviour
         // Grounded
         bool grounded = false;
         if (groundCheck != null)
-        {
             grounded = Physics2D.OverlapCircle(groundCheck.position, groundCheckRadius, groundLayer);
-        }
         anim.SetBool(HashIsGrounded, grounded);
 
         // Velocità
@@ -62,10 +58,6 @@ public class PlayerAnimatorLink : MonoBehaviour
     // Chiamala quando il player muore (Health -> OnDeath)
     public void PlayDie() => anim.SetTrigger(HashDie);
 
-    // --- Opzionale: se preferisci usare Animation Events nelle clip di attacco ---
-    // Puoi aggiungere un Event nelle clip (front/up/down) e chiamare questi metodi
-    // per eseguire il danno esattamente durante i frame attivi della hitbox.
-    // Questi cercano il PlayerController2D e invocano le sue routine.
     public void AE_AttackFront()
     {
         var ctrl = GetComponent<PlayerController2D>();
