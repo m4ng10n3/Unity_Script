@@ -27,6 +27,9 @@ public class PlayerAnimatorLink : MonoBehaviour
     private static readonly int HashAttackDown = Animator.StringToHash("attackDown");
     private static readonly int HashDie = Animator.StringToHash("die");
 
+    // Memorizza l'ultimo tipo di attacco per l'Animation Event
+    private SwordAttack.AttackType lastAttackType = SwordAttack.AttackType.Front;
+
     private void Awake()
     {
         anim = GetComponent<Animator>();
@@ -50,43 +53,38 @@ public class PlayerAnimatorLink : MonoBehaviour
         anim.SetFloat(HashVSpeed, v.y);
     }
 
-    // Chiamate da PlayerController2D a seconda della direzione d'attacco
-    public void PlayAttack() => anim.SetTrigger(HashAttack);
-    public void PlayAttackUp() => anim.SetTrigger(HashAttackUp);
-    public void PlayAttackDown() => anim.SetTrigger(HashAttackDown);
+    // Chiamate dal PlayerController2D — memorizzano il tipo e settano il trigger
+    public void PlayAttack()
+    {
+        lastAttackType = SwordAttack.AttackType.Front;
+        anim.SetTrigger(HashAttack);
+    }
+
+    public void PlayAttackUp()
+    {
+        lastAttackType = SwordAttack.AttackType.Up;
+        anim.SetTrigger(HashAttackUp);
+    }
+
+    public void PlayAttackDown()
+    {
+        lastAttackType = SwordAttack.AttackType.Down;
+        anim.SetTrigger(HashAttackDown);
+    }
 
     // Chiamala quando il player muore (Health -> OnDeath)
     public void PlayDie() => anim.SetTrigger(HashDie);
 
-    public void AE_AttackFront()
+    // === ANIMATION EVENT ===
+    // Aggiungi questo nome di evento nel frame d’impatto delle clip di attacco:
+    // AE_StartAttackWindow
+    public void AE_StartAttackWindow()
     {
-        var ctrl = GetComponent<PlayerController2D>();
-        if (ctrl != null)
-        {
-            // Chiama direttamente un attacco front (senza cooldown; gestiscilo in anim se serve)
-            var m = ctrl.GetType().GetMethod("AE_AttackFront", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
-            if (m != null) m.Invoke(ctrl, null);
-        }
-    }
+        var sword = GetComponentInChildren<SwordAttack>();
+        if (sword == null) return;
 
-    public void AE_AttackUp()
-    {
-        var ctrl = GetComponent<PlayerController2D>();
-        if (ctrl != null)
-        {
-            var m = ctrl.GetType().GetMethod("AE_AttackUp", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
-            if (m != null) m.Invoke(ctrl, null);
-        }
-    }
-
-    public void AE_AttackDown()
-    {
-        var ctrl = GetComponent<PlayerController2D>();
-        if (ctrl != null)
-        {
-            var m = ctrl.GetType().GetMethod("AE_AttackDown", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
-            if (m != null) m.Invoke(ctrl, null);
-        }
+        bool facingRight = transform.localScale.x >= 0f;
+        sword.StartAttackWindow(facingRight, lastAttackType);
     }
 
     private void OnDrawGizmosSelected()

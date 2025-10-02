@@ -1,3 +1,4 @@
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
@@ -9,43 +10,46 @@ public class SwordAttack : MonoBehaviour
     [SerializeField] private int damage = 1;
 
     [Header("Attack Window")]
-    [SerializeField] private float attackDuration = 1.1f;
+    [SerializeField] private float attackDuration = 0.15f;
 
     [Header("Hitbox - Front")]
-    [Tooltip("Offset orizzontale della hitbox (destra). A sinistra viene specchiato.")]
     [SerializeField] private Vector2 hitboxOffsetRight = new Vector2(0.6f, 0f);
     [SerializeField] private Vector2 hitboxSize = new Vector2(0.8f, 0.5f);
 
-    [Header("Hitbox - Up/Down")]
+    [Header("Hitbox - Up")]
     [SerializeField] private Vector2 hitboxOffsetUp = new Vector2(0f, 0.9f);
     [SerializeField] private Vector2 hitboxSizeUp = new Vector2(0.7f, 0.7f);
+
+    [Header("Hitbox - Down")]
     [SerializeField] private Vector2 hitboxOffsetDown = new Vector2(0f, -0.9f);
     [SerializeField] private Vector2 hitboxSizeDown = new Vector2(0.7f, 0.7f);
 
-    [SerializeField] private LayerMask targets; // Imposta su layer dei nemici
+    [SerializeField] private LayerMask targets; // layer dei bersagli (Enemy)
+
+    // Notifica quando un colpo va a segno (usato per il rimbalzo del down-attack)
+    public event Action<AttackType> OnHit;
 
     private bool attacking;
     private readonly Collider2D[] results = new Collider2D[8];
-    private readonly HashSet<object> damagedTargets = new HashSet<object>();
+    private readonly HashSet<Collider2D> damagedColliders = new HashSet<Collider2D>();
 
     public bool IsAttacking => attacking;
 
-    // Backward-compat: default Front
-    public void DoAttack(bool facingRight)
-    {
-        if (!attacking) StartCoroutine(AttackWindow(facingRight, AttackType.Front));
-    }
-
-    public void DoAttack(bool facingRight, AttackType type)
+    // Avvio tramite Animation Event
+    public void StartAttackWindow(bool facingRight, AttackType type)
     {
         if (!attacking) StartCoroutine(AttackWindow(facingRight, type));
     }
+
+    public void EndAttackWindow() { } // disponibile se vuoi chiuderla da AE
 
     private IEnumerator AttackWindow(bool facingRight, AttackType type)
     {
         attacking = true;
         float end = Time.time + attackDuration;
-        damagedTargets.Clear();
+        damagedColliders.Clear();
+
+        bool notifiedHit = false;
 
         while (Time.time < end)
         {
@@ -77,14 +81,20 @@ public class SwordAttack : MonoBehaviour
             for (int i = 0; i < count; i++)
             {
                 var col = results[i];
-                if (col == null || damagedTargets.Contains(col)) continue;
+                if (col == null || damagedColliders.Contains(col)) continue;
 
-                // Usa IDamageable (Health lo implementa) e fai il cast a Vector2
-                var receiver = col.GetComponentInParent<IDamageable>();
-                if (receiver != null)
+                // Colpisci Health con firma a 3 parametri
+                var health = col.GetComponentInParent<Health>();
+                if (health != null)
                 {
-                    receiver.TakeDamage(damage, (Vector2)col.transform.position, Vector2.zero);
-                    damagedTargets.Add(col);
+                    health.TakeDamage(damage, (Vector2)col.transform.position, Vector2.zero);
+                    damagedColliders.Add(col);
+
+                    if (!notifiedHit)
+                    {
+                        notifiedHit = true;
+                        OnHit?.Invoke(type);
+                    }
                 }
             }
 
@@ -93,14 +103,6 @@ public class SwordAttack : MonoBehaviour
 
         attacking = false;
     }
-
-    // AnimationEvents compat
-    public void StartAttackWindow(bool facingRight, AttackType type)
-    {
-        if (!attacking) StartCoroutine(AttackWindow(facingRight, type));
-    }
-
-    public void EndAttackWindow() { }
 
     private void OnDrawGizmosSelected()
     {
@@ -112,8 +114,10 @@ public class SwordAttack : MonoBehaviour
         Gizmos.DrawWireCube(r, hitboxSize);
         Gizmos.DrawWireCube(l, hitboxSize);
 
-        // Up / Down
+        // Up
         Gizmos.DrawWireCube((Vector2)transform.position + hitboxOffsetUp, hitboxSizeUp);
+
+        // Down
         Gizmos.DrawWireCube((Vector2)transform.position + hitboxOffsetDown, hitboxSizeDown);
     }
 }

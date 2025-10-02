@@ -1,3 +1,4 @@
+using System;
 using UnityEngine;
 
 [RequireComponent(typeof(Rigidbody2D))]
@@ -12,17 +13,16 @@ public class PlayerController2D : MonoBehaviour
     [SerializeField] private float groundCheckRadius = 0.2f;
     [SerializeField] private LayerMask groundLayer;
 
-    [Header("Attack")]
+    [Header("Attack Points")]
     [Tooltip("Punto d'attacco frontale (facoltativo se usi solo alto/basso).")]
     [SerializeField] private Transform attackPointFront;
     [Tooltip("Punto d'attacco verso l'alto.")]
     [SerializeField] private Transform attackPointUp;
     [Tooltip("Punto d'attacco verso il basso.")]
     [SerializeField] private Transform attackPointDown;
-    [SerializeField] private float attackRadius = 0.35f;
-    [SerializeField] private LayerMask enemyLayer;
+
+    [Header("Attack Settings")]
     [SerializeField] private float attackCooldown = 0.25f;
-    [SerializeField] private int attackDamage = 1;
 
     [Header("Down Attack Bounce")]
     [Tooltip("Velocità verticale impostata quando l'attacco in basso va a segno.")]
@@ -33,14 +33,32 @@ public class PlayerController2D : MonoBehaviour
     private bool isGrounded;
     private bool facingRight = true;
     private float lastAttackTime = -999f;
-    private PlayerAnimatorLink animLink;
 
-    private enum LocalAttackDir { Front, Up, Down }
+    private PlayerAnimatorLink animLink;
+    private SwordAttack sword;
+
+    private enum AttackDir { Front, Up, Down }
 
     private void Awake()
     {
         rb = GetComponent<Rigidbody2D>();
         animLink = GetComponent<PlayerAnimatorLink>();
+        sword = GetComponentInChildren<SwordAttack>();
+
+        if (sword != null)
+        {
+            // Rimbalzo quando un attacco Down colpisce
+            sword.OnHit += OnSwordHit;
+        }
+        else
+        {
+            Debug.LogWarning("[PlayerController2D] Nessun SwordAttack trovato come child.");
+        }
+    }
+
+    private void OnDestroy()
+    {
+        if (sword != null) sword.OnHit -= OnSwordHit;
     }
 
     private void Update()
@@ -61,18 +79,18 @@ public class PlayerController2D : MonoBehaviour
 
             if (v > 0.5f && attackPointUp != null)
             {
-                TryAttack(LocalAttackDir.Up);
+                TryAttack(AttackDir.Up);
             }
             else if (v < -0.5f && attackPointDown != null)
             {
-                // ⬇️ Attacco in basso solo se NON siamo grounded
+                // Down attack SOLO se non siamo grounded
                 if (!isGrounded)
-                    TryAttack(LocalAttackDir.Down);
+                    TryAttack(AttackDir.Down);
             }
             else
             {
                 if (attackPointFront != null)
-                    TryAttack(LocalAttackDir.Front);
+                    TryAttack(AttackDir.Front);
             }
         }
 
@@ -91,90 +109,30 @@ public class PlayerController2D : MonoBehaviour
         rb.linearVelocity = new Vector2(moveInput * moveSpeed, rb.linearVelocity.y);
     }
 
-    private void TryAttack(LocalAttackDir dir)
+    private void TryAttack(AttackDir dir)
     {
         if (Time.time - lastAttackTime < attackCooldown) return;
         lastAttackTime = Time.time;
 
-        // Trigger animazioni coerenti
+        // Trigger animazioni (la hitbox parte tramite Animation Event)
         if (animLink != null)
         {
             switch (dir)
             {
-                case LocalAttackDir.Up: animLink.PlayAttackUp(); break;
-                case LocalAttackDir.Down: animLink.PlayAttackDown(); break; // chiamato solo se !isGrounded
+                case AttackDir.Up: animLink.PlayAttackUp(); break;
+                case AttackDir.Down: animLink.PlayAttackDown(); break; // chiamato solo se !isGrounded
                 default: animLink.PlayAttack(); break;
             }
         }
-
-        // Hit immediato (se non usi AE sulla spada)
-        bool hitSomething = DoAttack(dir);
-
-        // Rimbalzo se l’attacco in basso ha colpito
-        if (dir == LocalAttackDir.Down && hitSomething)
-        {
-            BounceOnDownAttack();
-        }
     }
 
-    private bool DoAttack(LocalAttackDir dir)
+    private void OnSwordHit(SwordAttack.AttackType type)
     {
-        Transform p = attackPointFront;
-        switch (dir)
+        if (type == SwordAttack.AttackType.Down)
         {
-            case LocalAttackDir.Up: p = attackPointUp; break;
-            case LocalAttackDir.Down: p = attackPointDown; break;
-            case LocalAttackDir.Front:
-                if (attackPointFront == null)
-                {
-                    // fallback: piccolo offset davanti al player
-                    Vector3 off = new Vector3(facingRight ? 0.35f : -0.35f, 0f, 0f);
-                    return DamageAtPosition((Vector2)(transform.position + off));
-                }
-                break;
+            // Rimbalzo solo se l'attacco in basso ha colpito
+            rb.linearVelocity = new Vector2(rb.linearVelocity.x, downAttackBounceVelocity);
         }
-
-        if (p == null) return false;
-        return DamageAtPosition(p.position);
-    }
-
-    private bool DamageAtPosition(Vector2 pos)
-    {
-        Collider2D[] hits = Physics2D.OverlapCircleAll(pos, attackRadius, enemyLayer);
-        bool hitSomething = false;
-
-        foreach (var h in hits)
-        {
-            if (h == null) continue;
-            hitSomething = true;
-
-            // Evita SendMessage con firma errata: usa IDamageable/Health quando disponibile
-            var dmg = h.GetComponentInParent<IDamageable>();
-            if (dmg != null)
-            {
-                dmg.TakeDamage(attackDamage, (Vector2)h.transform.position, Vector2.zero);
-                continue;
-            }
-
-            // Fallback: prova ad invocare un TakeDamage(int) se esiste davvero
-            var comp = h.GetComponentInParent<MonoBehaviour>();
-            if (comp != null)
-            {
-                var m1 = comp.GetType().GetMethod("TakeDamage", new System.Type[] { typeof(int) });
-                if (m1 != null)
-                {
-                    m1.Invoke(comp, new object[] { attackDamage });
-                }
-                // altrimenti ignora: evitiamo l'eccezione di SendMessage quando la firma non coincide
-            }
-        }
-
-        return hitSomething;
-    }
-
-    private void BounceOnDownAttack()
-    {
-        rb.linearVelocity = new Vector2(rb.linearVelocity.x, downAttackBounceVelocity);
     }
 
     private void FlipIfNeeded(float input)
@@ -196,9 +154,10 @@ public class PlayerController2D : MonoBehaviour
         Gizmos.color = Color.yellow;
         if (groundCheck != null) Gizmos.DrawWireSphere(groundCheck.position, groundCheckRadius);
 
-        Gizmos.color = Color.cyan;
-        if (attackPointFront != null) Gizmos.DrawWireSphere(attackPointFront.position, attackRadius);
-        if (attackPointUp != null) Gizmos.DrawWireSphere(attackPointUp.position, attackRadius);
-        if (attackPointDown != null) Gizmos.DrawWireSphere(attackPointDown.position, attackRadius);
+        // Solo punti di riferimento (nessuna hitbox qui)
+        //Gizmos.color = Color.cyan;
+        //if (attackPointFront != null) Gizmos.DrawWireSphere(attackPointFront.position, 0.07f);
+        //if (attackPointUp != null) Gizmos.DrawWireSphere(attackPointUp.position, 0.07f);
+        //if (attackPointDown != null) Gizmos.DrawWireSphere(attackPointDown.position, 0.07f);
     }
 }
