@@ -13,15 +13,30 @@ public class PlayerController2D : MonoBehaviour
     [SerializeField] private LayerMask groundLayer;
 
     [Header("Attack")]
-    [SerializeField] private SwordAttack sword;
-    [SerializeField] private float attackCooldown = 0.3f;
+    [Tooltip("Punto d'attacco frontale (facoltativo se usi solo alto/basso).")]
+    [SerializeField] private Transform attackPointFront;
+    [Tooltip("Punto d'attacco verso l'alto.")]
+    [SerializeField] private Transform attackPointUp;
+    [Tooltip("Punto d'attacco verso il basso.")]
+    [SerializeField] private Transform attackPointDown;
+    [SerializeField] private float attackRadius = 0.35f;
+    [SerializeField] private LayerMask enemyLayer;
+    [SerializeField] private float attackCooldown = 0.25f;
+    [SerializeField] private int attackDamage = 1;
+
+    [Header("Down Attack Bounce")]
+    [Tooltip("Velocit� verticale impostata quando l'attacco in basso va a segno.")]
+    [SerializeField] private float downAttackBounceVelocity = 12f;
 
     private Rigidbody2D rb;
     private float moveInput;
     private bool isGrounded;
     private bool facingRight = true;
     private float lastAttackTime = -999f;
+
     private PlayerAnimatorLink animLink;
+
+    private enum AttackDir { Front, Up, Down }
 
     private void Awake()
     {
@@ -31,23 +46,33 @@ public class PlayerController2D : MonoBehaviour
 
     private void Update()
     {
-        // CHANGE: Lock movement and input while attacking
-        if (sword != null && sword.IsAttacking)
-        {
-            moveInput = 0f;
-            return;
-        }
-
+        // Movimento orizzontale
         moveInput = Input.GetAxisRaw("Horizontal");
 
+        // Salto
         if (Input.GetButtonDown("Jump") && isGrounded)
         {
             rb.linearVelocity = new Vector2(rb.linearVelocity.x, jumpForce);
         }
 
+        // Attacchi: Fire1 + direzione verticale
         if (Input.GetButtonDown("Fire1"))
         {
-            TryAttack();
+            float v = Input.GetAxisRaw("Vertical");
+            if (v > 0.5f && attackPointUp != null)
+            {
+                TryAttack(AttackDir.Up);
+            }
+            else if (v < -0.5f && attackPointDown != null)
+            {
+                TryAttack(AttackDir.Down);
+            }
+            else
+            {
+                // facoltativo: attacco frontale
+                if (attackPointFront != null)
+                    TryAttack(AttackDir.Front);
+            }
         }
 
         FlipIfNeeded(moveInput);
@@ -55,27 +80,86 @@ public class PlayerController2D : MonoBehaviour
 
     private void FixedUpdate()
     {
-        isGrounded = Physics2D.OverlapCircle(groundCheck.position, groundCheckRadius, groundLayer);
-
-        // CHANGE: Freeze horizontal velocity while attacking
-        if (sword != null && sword.IsAttacking)
+        // Grounded
+        if (groundCheck != null)
         {
-            rb.linearVelocity = new Vector2(0f, rb.linearVelocity.y);
-            return;
+            isGrounded = Physics2D.OverlapCircle(groundCheck.position, groundCheckRadius, groundLayer);
         }
 
+        // Movimento orizzontale
         rb.linearVelocity = new Vector2(moveInput * moveSpeed, rb.linearVelocity.y);
     }
 
-    private void TryAttack()
+    private void TryAttack(AttackDir dir)
     {
-        // CHANGE: Prevent new attack while current attack is active
-        if (sword != null && sword.IsAttacking) return;
-        if (Time.time - lastAttackTime < attackCooldown) return;
+        if (Time.time - lastAttackTime < attackCooldown)
+            return;
+
         lastAttackTime = Time.time;
-        if (animLink != null) animLink.PlayAttack();
-        // Hitbox triggered via AnimationEvent
-        // sword.DoAttack(facingRight);
+
+        // Trigger animazioni
+        if (animLink != null)
+        {
+            switch (dir)
+            {
+                case AttackDir.Up: animLink.PlayAttackUp(); break;
+                case AttackDir.Down: animLink.PlayAttackDown(); break;
+                default: animLink.PlayAttack(); break;
+            }
+        }
+
+        // Esegui effettivamente l'attacco
+        bool hitSomething = DoAttack(dir);
+
+        // Se attacco in basso ha colpito, rimbalzo
+        if (dir == AttackDir.Down && hitSomething)
+        {
+            BounceOnDownAttack();
+        }
+    }
+
+    private bool DoAttack(AttackDir dir)
+    {
+        Transform p = attackPointFront;
+
+        switch (dir)
+        {
+            case AttackDir.Up: p = attackPointUp; break;
+            case AttackDir.Down: p = attackPointDown; break;
+            case AttackDir.Front:
+                // Se non configurato il punto frontale, usa avanti rispetto alla scala
+                if (attackPointFront == null)
+                {
+                    // fallback: piccolo offset davanti al player
+                    Vector3 off = new Vector3(facingRight ? 0.35f : -0.35f, 0f, 0f);
+                    return DamageAtPosition(transform.position + off);
+                }
+                break;
+        }
+
+        if (p == null) return false;
+        return DamageAtPosition(p.position);
+    }
+
+    private bool DamageAtPosition(Vector2 pos)
+    {
+        Collider2D[] hits = Physics2D.OverlapCircleAll(pos, attackRadius, enemyLayer);
+        bool hitSomething = false;
+
+        foreach (var h in hits)
+        {
+            hitSomething = true;
+            // Invoca un eventuale metodo TakeDamage(int) sul nemico (non obbligatorio)
+            h.SendMessage("TakeDamage", attackDamage, SendMessageOptions.DontRequireReceiver);
+        }
+
+        return hitSomething;
+    }
+
+    private void BounceOnDownAttack()
+    {
+        // Imposta la velocit� verticale per simulare il rimbalzo
+        rb.linearVelocity = new Vector2(rb.linearVelocity.x, downAttackBounceVelocity);
     }
 
     private void FlipIfNeeded(float input)
@@ -94,8 +178,16 @@ public class PlayerController2D : MonoBehaviour
 
     private void OnDrawGizmosSelected()
     {
-        if (groundCheck == null) return;
         Gizmos.color = Color.yellow;
-        Gizmos.DrawWireSphere(groundCheck.position, groundCheckRadius);
+        if (groundCheck != null)
+            Gizmos.DrawWireSphere(groundCheck.position, groundCheckRadius);
+
+        Gizmos.color = Color.cyan;
+        if (attackPointFront != null)
+            Gizmos.DrawWireSphere(attackPointFront.position, attackRadius);
+        if (attackPointUp != null)
+            Gizmos.DrawWireSphere(attackPointUp.position, attackRadius);
+        if (attackPointDown != null)
+            Gizmos.DrawWireSphere(attackPointDown.position, attackRadius);
     }
 }

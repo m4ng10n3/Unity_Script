@@ -18,62 +18,84 @@ public class PlayerAnimatorLink : MonoBehaviour
     private Animator anim;
     private Rigidbody2D rb;
 
-    // Animator parameter hashes (veloci e sicuri contro refusi)
+    // Parametri / trigger (adatta ai tuoi Animator Controller)
     private static readonly int HashIsGrounded = Animator.StringToHash("isGrounded");
     private static readonly int HashSpeed = Animator.StringToHash("speed");
     private static readonly int HashVSpeed = Animator.StringToHash("vSpeed");
     private static readonly int HashAttack = Animator.StringToHash("attack");
+    private static readonly int HashAttackUp = Animator.StringToHash("attackUp");
+    private static readonly int HashAttackDown = Animator.StringToHash("attackDown");
     private static readonly int HashDie = Animator.StringToHash("die");
 
     private void Awake()
     {
         anim = GetComponent<Animator>();
         rb = GetComponent<Rigidbody2D>();
+
         if (groundCheck == null)
         {
-            Debug.LogWarning("[PlayerAnimatorLink] groundCheck non assegnato: il check del suolo non funzioner�.");
+            Debug.LogWarning("[PlayerAnimatorLink] groundCheck non assegnato: il check del suolo non funzionerà.");
         }
     }
 
     private void Update()
     {
         // Grounded
-        bool isGrounded = false;
+        bool grounded = false;
         if (groundCheck != null)
         {
-            isGrounded = Physics2D.OverlapCircle(groundCheck.position, groundCheckRadius, groundLayer);
+            grounded = Physics2D.OverlapCircle(groundCheck.position, groundCheckRadius, groundLayer);
         }
-        anim.SetBool(HashIsGrounded, isGrounded);
+        anim.SetBool(HashIsGrounded, grounded);
 
-        // Velocit� orizzontale e verticale
-        Vector2 v = rb.linearVelocity; // ?? in 2D � .velocity, non .linearVelocity
+        // Velocità
+        Vector2 v = rb.linearVelocity;
         anim.SetFloat(HashSpeed, Mathf.Abs(v.x));
         anim.SetFloat(HashVSpeed, v.y);
-        // NB: in Animator useremo vSpeed>threshold e vSpeed<threshold per Jump/Fall
     }
 
-    // Chiamala dal codice quando esegui l�attacco (Input)
+    // Chiamate da PlayerController2D a seconda della direzione d'attacco
     public void PlayAttack() => anim.SetTrigger(HashAttack);
+    public void PlayAttackUp() => anim.SetTrigger(HashAttackUp);
+    public void PlayAttackDown() => anim.SetTrigger(HashAttackDown);
 
     // Chiamala quando il player muore (Health -> OnDeath)
     public void PlayDie() => anim.SetTrigger(HashDie);
 
-    // ---- Opzionale: Animation Events nella clip di attacco ----
-    // Dentro la clip Attack puoi creare un Event chiamando questi metodi:
-
-    // Per aprire/chiudere una finestra di hitbox legata all�animazione
-    public void AE_StartAttackWindow()
+    // --- Opzionale: se preferisci usare Animation Events nelle clip di attacco ---
+    // Puoi aggiungere un Event nelle clip (front/up/down) e chiamare questi metodi
+    // per eseguire il danno esattamente durante i frame attivi della hitbox.
+    // Questi cercano il PlayerController2D e invocano le sue routine.
+    public void AE_AttackFront()
     {
-        var sword = GetComponentInChildren<SwordAttack>();
-        bool facingRight = transform.localScale.x >= 0f;
-        if (sword != null)
+        var ctrl = GetComponent<PlayerController2D>();
+        if (ctrl != null)
         {
-            sword.DoAttack(facingRight);
-            Debug.Log("Evento d'attacco chiamato");
+            // Chiama direttamente un attacco front (senza cooldown; gestiscilo in anim se serve)
+            var m = ctrl.GetType().GetMethod("AE_AttackFront", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+            if (m != null) m.Invoke(ctrl, null);
         }
     }
 
-    
+    public void AE_AttackUp()
+    {
+        var ctrl = GetComponent<PlayerController2D>();
+        if (ctrl != null)
+        {
+            var m = ctrl.GetType().GetMethod("AE_AttackUp", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+            if (m != null) m.Invoke(ctrl, null);
+        }
+    }
+
+    public void AE_AttackDown()
+    {
+        var ctrl = GetComponent<PlayerController2D>();
+        if (ctrl != null)
+        {
+            var m = ctrl.GetType().GetMethod("AE_AttackDown", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+            if (m != null) m.Invoke(ctrl, null);
+        }
+    }
 
     private void OnDrawGizmosSelected()
     {
